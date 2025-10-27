@@ -1,14 +1,20 @@
 # content_based/content_based.py
+from sklearn.metrics.pairwise import cosine_similarity
 from content_based.preferencias import Preferencias
 from content_based.recomendador import gerar_recomendacao
-from content_based.diversidade import diversidade_total
+from content_based.diversidade import diversidade_rodada
+from content_based.diversidade import macrodiversidade_rodadas
 from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
 import random
 import numpy as np
+import networkx as nx
+import matplotlib.pyplot as plt
+from pyvis.network import Network
+import plotly.graph_objects as go
 
-TOP_N = 30           # número recomendações por rodada
-NUM_RODADAS = 5      # número de rodadas automáticas
+NUM_RODADAS = 20      # número de rodadas automáticas
+TOP_N = 15           # número recomendações por rodada
 
 movies = pd.read_csv("dataset/dataset_gerado.csv")
 
@@ -25,9 +31,11 @@ def main():
     print("INICIANDO SISTEMA DE RECOMENDAÇÃO")
     print("-" * 80)
 
-    preferencias = Preferencias(alpha=0.50)
+    preferencias = Preferencias(alpha=0.90)
     historico_recomendados = []
+    historico_recomendados_por_rodada = []
     diversidade_rodada_historico = []
+    relevancia_rodada_historico = []
 
     for iteracao in range(1, NUM_RODADAS + 1):
         print("-" * 80)
@@ -42,6 +50,14 @@ def main():
         print(f"Diretor escolhido: {diretor}")
         print(f"País escolhido: {pais}")
 
+        vetor_rodada_genero = vectorizer_genero.transform([genero])
+        vetor_rodada_diretor = vectorizer_diretor.transform([diretor])
+        vetor_rodada_pais = vectorizer_pais.transform([pais])
+
+        sim_genero_rodada = cosine_similarity(vetor_rodada_genero, matriz_genero)
+        sim_diretor_rodada = cosine_similarity(vetor_rodada_diretor, matriz_diretor)
+        sim_pais_rodada = cosine_similarity(vetor_rodada_pais, matriz_pais)
+
         preferencias.adicionar(genero, diretor, pais,
                                vectorizer_genero, vectorizer_diretor, vectorizer_pais)
 
@@ -49,6 +65,7 @@ def main():
                                                                            matriz_genero, matriz_diretor, matriz_pais)
         ids_recomendados = [i[0] for i in sim_scores[:TOP_N]]
         historico_recomendados.extend(ids_recomendados)
+        historico_recomendados_por_rodada.append(ids_recomendados)
 
         pd.set_option("display.max_columns", None)
         pd.set_option("display.width", None)
@@ -57,21 +74,22 @@ def main():
         print(movies.iloc[ids_recomendados][colunas].reset_index(drop=True))
         print("-" * 80)
 
-        relevancia_media_total = np.mean([i[1] for i in sim_scores[:20]])
-        relevancia_genero = np.mean(sim_genero[0, ids_recomendados])
-        relevancia_diretor = np.mean(sim_diretor[0, ids_recomendados])
-        relevancia_pais = np.mean(sim_pais[0, ids_recomendados])
+        relevancia_genero = np.mean(sim_genero_rodada[0, ids_recomendados])
+        relevancia_diretor = np.mean(sim_diretor_rodada[0, ids_recomendados])
+        relevancia_pais = np.mean(sim_pais_rodada[0, ids_recomendados])
+        relevancia_media_total = float(np.nanmean([relevancia_genero, relevancia_diretor, relevancia_pais]))
+        relevancia_rodada_historico.append(relevancia_media_total)
 
-        print("\nRelevância média das recomendações (interesse do usuário):")
+        print("\nRelevância média desta rodada:")
         print(f" - Gênero:  {relevancia_genero:.2f}")
         print(f" - Diretor: {relevancia_diretor:.2f}")
         print(f" - País:    {relevancia_pais:.2f}")
         print(f" - Total (média geral): {relevancia_media_total:.2f}")
 
-        div_rodada = diversidade_total(ids_recomendados, matriz_genero, matriz_diretor, matriz_pais)
+        div_rodada = diversidade_rodada(ids_recomendados, matriz_genero, matriz_diretor, matriz_pais)
         diversidade_rodada_historico.append(div_rodada)
 
-        print("\nDiversidade desta rodada:")
+        print("\nMicrodiversidade desta rodada:")
         print(f" - Gênero: {div_rodada['div_genero']:.2f}")
         print(f" - Diretor: {div_rodada['div_diretor']:.2f}")
         print(f" - Pais: {div_rodada['div_pais']:.2f}")
@@ -82,36 +100,34 @@ def main():
         else:
             ultimas5 = diversidade_rodada_historico
 
-        print("\nMédia de Diversidade das últimas cinco rodadas:")
-        if len(ultimas5) > 0:
-            print(f" - Gênero: {np.mean([d['div_genero'] for d in ultimas5]):.2f}")
-            print(f" - Diretor: {np.mean([d['div_diretor'] for d in ultimas5]):.2f}")
-            print(f" - País: {np.mean([d['div_pais'] for d in ultimas5]):.2f}")
-            print(f" - Total: {np.mean([d['div_total'] for d in ultimas5]):.2f}")
-        else:
-            print(" - (sem rodadas suficientes)")
-
-        div_total = diversidade_total(historico_recomendados, matriz_genero, matriz_diretor, matriz_pais)
-        print("\nDiversidade acumulada até agora:")
-        print(f" - Gênero: {div_total['div_genero']:.2f}")
-        print(f" - Diretor: {div_total['div_diretor']:.2f}")
-        print(f" - Pais: {div_total['div_pais']:.2f}")
-        print(f" - Total (ponderado): {div_total['div_total']:.2f}")
-
     print("\nRELATÓRIO FINAL DE EXECUÇÃO:")
     print("-" * 80)
-    print(f"Diversidade Acumulada final: {div_total['div_total']:.2f}")
 
-    if len(ultimas5) > 0:
-        diversidade_ultimas_rodadas = np.mean([d['div_total'] for d in ultimas5])
-        print(f"Média de Diversidade das últimas cinco rodadas: {diversidade_ultimas_rodadas:.2f}\n")
-        print("CONCLUSÃO: ")
-        if diversidade_ultimas_rodadas >= 0.4:
-            print("TERMINOU SEM ESTAR EM UMA BOLHA")
-        else:
-            print("TERMINOU EM UMA BOLHA")
-    else:
-        print("Poucas rodadas para concluir (menos que 1).")
+    microdiversidade_media_geral = np.mean([d['div_total'] for d in diversidade_rodada_historico])
+    microdiversidade_ultimas_rodadas = np.mean([d['div_total'] for d in ultimas5])
+
+    print(f"Relevancia média total: {float(np.nanmean(relevancia_rodada_historico)):.2f}\n")
+    print("Microdiversidade:")
+    print(f" - Média Geral: {microdiversidade_media_geral:.2f}")
+    print(f" - Últimas 5 Rodadas: {microdiversidade_ultimas_rodadas:.2f}")
+
+
+    macro_geral_final = macrodiversidade_rodadas(historico_recomendados_por_rodada,matriz_genero, matriz_diretor, matriz_pais)
+
+    macro_ultimas5_final = macrodiversidade_rodadas(historico_recomendados_por_rodada, matriz_genero, matriz_diretor, matriz_pais, ultimas_x = 5)
+
+    # MACRODIVERSIDADE
+    print("\nMacrodiversidade:")
+    print(" - Geral:")
+    print(f"    Gênero: {macro_geral_final['macro_div_genero']:.2f}")
+    print(f"    Diretor: {macro_geral_final['macro_div_diretor']:.2f}")
+    print(f"    País: {macro_geral_final['macro_div_pais']:.2f}")
+    print(f"    Total: {macro_geral_final['macro_div_total']:.2f}")
+    print(" - Últimas 5 rodadas:")
+    print(f"    Gênero: {macro_ultimas5_final['macro_div_genero']:.2f}")
+    print(f"    Diretor: {macro_ultimas5_final['macro_div_diretor']:.2f}")
+    print(f"    País: {macro_ultimas5_final['macro_div_pais']:.2f}")
+    print(f"    Total: {macro_ultimas5_final['macro_div_total']:.2f}")
 
 if __name__ == "__main__":
     main()

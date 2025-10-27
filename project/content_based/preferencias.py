@@ -1,5 +1,5 @@
 class Preferencias:
-    def __init__(self, alpha=0.50):
+    def __init__(self, alpha):
         self.alpha = alpha
         self.user_genero = None
         self.user_diretor = None
