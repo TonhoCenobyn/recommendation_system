@@ -1,20 +1,15 @@
-# content_based/content_based.py
 from sklearn.metrics.pairwise import cosine_similarity
 from content_based.preferencias import Preferencias
 from content_based.recomendador import gerar_recomendacao
-from content_based.diversidade import diversidade_rodada
-from content_based.diversidade import macrodiversidade_rodadas
 from sklearn.feature_extraction.text import TfidfVectorizer
 import pandas as pd
-import random
 import numpy as np
-import networkx as nx
-import matplotlib.pyplot as plt
-from pyvis.network import Network
 import plotly.graph_objects as go
+from recommendation_system.project.content_based.diversidade import macrodiversidade_geral, macrodiversidade_rodadas, macrodiversidade_filmes, microdiversidade, microdiversidade_parametro, macrodiversidade_combinada
+from recommendation_system.project.content_based.usuario import inserir_entradas
 
-NUM_RODADAS = 20      # número de rodadas automáticas
-TOP_N = 15           # número recomendações por rodada
+NUM_RODADAS = 10      # número de rodadas automáticas
+TOP_N = 10           # número recomendações por rodada
 
 movies = pd.read_csv("dataset/dataset_gerado.csv")
 
@@ -32,6 +27,13 @@ def main():
     print("-" * 80)
 
     preferencias = Preferencias(alpha=0.90)
+
+    historico_entradas = {
+        "genero": [],
+        "diretor": [],
+        "pais_origem": []
+    }
+
     historico_recomendados = []
     historico_recomendados_por_rodada = []
     diversidade_rodada_historico = []
@@ -42,13 +44,11 @@ def main():
         print(f"RODADA: {iteracao}")
         print("-" * 80)
 
-        genero = random.choice(movies["genero"].unique())
-        diretor = random.choice(movies["diretor"].unique())
-        pais = random.choice(movies["pais_origem"].unique())
+        genero, diretor, pais = inserir_entradas(movies, historico_entradas, 3)
 
-        print(f"Gênero escolhido: {genero}")
-        print(f"Diretor escolhido: {diretor}")
-        print(f"País escolhido: {pais}")
+        historico_entradas["genero"].append(genero)
+        historico_entradas["diretor"].append(diretor)
+        historico_entradas["pais_origem"].append(pais)
 
         vetor_rodada_genero = vectorizer_genero.transform([genero])
         vetor_rodada_diretor = vectorizer_diretor.transform([diretor])
@@ -69,6 +69,7 @@ def main():
 
         pd.set_option("display.max_columns", None)
         pd.set_option("display.width", None)
+
         print("\nRECOMENDAÇÕES:")
         colunas = ["titulo", "genero", "diretor", "pais_origem"]
         print(movies.iloc[ids_recomendados][colunas].reset_index(drop=True))
@@ -86,7 +87,7 @@ def main():
         print(f" - País:    {relevancia_pais:.2f}")
         print(f" - Total (média geral): {relevancia_media_total:.2f}")
 
-        div_rodada = diversidade_rodada(ids_recomendados, matriz_genero, matriz_diretor, matriz_pais)
+        div_rodada = microdiversidade(ids_recomendados, matriz_genero, matriz_diretor, matriz_pais)
         diversidade_rodada_historico.append(div_rodada)
 
         print("\nMicrodiversidade desta rodada:")
@@ -111,23 +112,86 @@ def main():
     print(f" - Média Geral: {microdiversidade_media_geral:.2f}")
     print(f" - Últimas 5 Rodadas: {microdiversidade_ultimas_rodadas:.2f}")
 
-
-    macro_geral_final = macrodiversidade_rodadas(historico_recomendados_por_rodada,matriz_genero, matriz_diretor, matriz_pais)
-
-    macro_ultimas5_final = macrodiversidade_rodadas(historico_recomendados_por_rodada, matriz_genero, matriz_diretor, matriz_pais, ultimas_x = 5)
-
     # MACRODIVERSIDADE
     print("\nMacrodiversidade:")
-    print(" - Geral:")
-    print(f"    Gênero: {macro_geral_final['macro_div_genero']:.2f}")
-    print(f"    Diretor: {macro_geral_final['macro_div_diretor']:.2f}")
-    print(f"    País: {macro_geral_final['macro_div_pais']:.2f}")
-    print(f"    Total: {macro_geral_final['macro_div_total']:.2f}")
-    print(" - Últimas 5 rodadas:")
-    print(f"    Gênero: {macro_ultimas5_final['macro_div_genero']:.2f}")
-    print(f"    Diretor: {macro_ultimas5_final['macro_div_diretor']:.2f}")
-    print(f"    País: {macro_ultimas5_final['macro_div_pais']:.2f}")
-    print(f"    Total: {macro_ultimas5_final['macro_div_total']:.2f}")
+    print("-" * 80)
+
+    # --- MACRODIVERSIDADE GLOBAL (filmes combinados) ---
+    macro_global_genero = (macrodiversidade_filmes(historico_recomendados_por_rodada, matriz_genero))
+    macro_global_diretor = macrodiversidade_filmes(historico_recomendados_por_rodada, matriz_diretor)
+    macro_global_pais = macrodiversidade_filmes(historico_recomendados_por_rodada, matriz_pais)
+    macro_global_total = (macro_global_genero + macro_global_diretor + macro_global_pais) / 3
+
+    print("MACRODIVERSIDADE GLOBAL (todos os filmes recomendados):")
+    print(f" - Gênero:  {macro_global_genero:.2f}")
+    print(f" - Diretor: {macro_global_diretor:.2f}")
+    print(f" - País:    {macro_global_pais:.2f}")
+    print(f" - Total:   {macro_global_total:.2f}")
+    print()
+
+    # --- MACRODIVERSIDADE ENTRE RODADAS ---
+    macro_rodadas_genero = macrodiversidade_rodadas(historico_recomendados_por_rodada, matriz_genero)
+    macro_rodadas_diretor = macrodiversidade_rodadas(historico_recomendados_por_rodada, matriz_diretor)
+    macro_rodadas_pais = macrodiversidade_rodadas(historico_recomendados_por_rodada, matriz_pais)
+    macro_rodadas_total = (macro_rodadas_genero + macro_rodadas_diretor + macro_rodadas_pais) / 3
+
+    print("MACRODIVERSIDADE ENTRE RODADAS:")
+    print(f" - Gênero:  {macro_rodadas_genero:.2f}")
+    print(f" - Diretor: {macro_rodadas_diretor:.2f}")
+    print(f" - País:    {macro_rodadas_pais:.2f}")
+    print(f" - Total:   {macro_rodadas_total:.2f}")
+    print()
+
+    # --- MACRODIVERSIDADE COMBINADA (ponderada por α) ---
+    macro_combinada_final = macrodiversidade_geral(
+        historico_recomendados_por_rodada,
+        matriz_genero, matriz_diretor, matriz_pais,
+        alpha=0.5
+    )
+
+    print("MACRODIVERSIDADE COMBINADA (α = 0.5):")
+    print(f" - Gênero:  {macro_combinada_final['macro_div_genero']:.2f}")
+    print(f" - Diretor: {macro_combinada_final['macro_div_diretor']:.2f}")
+    print(f" - País:    {macro_combinada_final['macro_div_pais']:.2f}")
+    print(f" - Total:   {macro_combinada_final['macro_div_total']:.2f}")
+    print("-" * 80)
+
+
+    preferencias_generos = historico_entradas["genero"]
+    preferencias_diretores = historico_entradas["diretor"]
+    preferencias_paises = historico_entradas["pais_origem"]
+
+    # Contar frequência de cada item
+    from collections import Counter
+    contagens = Counter(preferencias_generos + preferencias_diretores + preferencias_paises)
+
+    # Converter para DataFrame (para plotar)
+    df_freq = pd.DataFrame({
+        "Entrada": list(contagens.keys()),
+        "Frequência": list(contagens.values())
+    }).sort_values(by="Frequência", ascending=False)
+
+    print("\nFREQUENCIA DE ENTRADAS")
+    print(df_freq)
+
+    # Gráfico interativo de barras (Plotly)
+    fig = go.Figure(data=[
+        go.Bar(
+            x=df_freq["Entrada"],
+            y=df_freq["Frequência"],
+            text=df_freq["Frequência"],
+            textposition="auto",
+            marker_color="lightskyblue"
+        )
+    ])
+    fig.update_layout(
+        title="Frequência das Preferências Inseridas pelo Usuário",
+        xaxis_title="Entrada (Gênero / Diretor / País)",
+        yaxis_title="Número de vezes escolhido",
+        template="plotly_white",
+        xaxis_tickangle=45
+    )
+    fig.show()
 
 if __name__ == "__main__":
     main()
