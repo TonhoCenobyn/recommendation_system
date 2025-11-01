@@ -9,7 +9,7 @@ from recommendation_system.project.content_based.diversidade import macrodiversi
 from recommendation_system.project.content_based.usuario import inserir_entradas
 
 NUM_RODADAS = 10      # número de rodadas automáticas
-TOP_N = 10           # número recomendações por rodada
+TOP_N = 25           # número recomendações por rodada
 
 movies = pd.read_csv("dataset/dataset_gerado.csv")
 
