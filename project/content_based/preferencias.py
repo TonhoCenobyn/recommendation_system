@@ -18,3 +18,11 @@ class Preferencias:
             self.user_genero = self.alpha * novo_genero + (1 - self.alpha) * self.user_genero
             self.user_diretor = self.alpha * novo_diretor + (1 - self.alpha) * self.user_diretor
             self.user_pais = self.alpha * novo_pais + (1 - self.alpha) * self.user_pais
+
+class Rodada:
+    def __init__(self, recomendacoes):
+        self.recomendacoes = recomendacoes
+        self.relevancia_entrada = None
+        self.relevancia_perfil = None
+        self.microdiversidade = None
+

@@ -1,6 +1,19 @@
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 
+#RELEVANCIA
+def reajustar_relevancia(relevancias, referencia=0.7):
+    if isinstance(relevancias, dict):
+        return {
+            chave: valor / referencia if referencia != 0 else valor
+            for chave, valor in relevancias.items()
+        }
+    elif isinstance(relevancias, (int, float)):
+        return relevancias / referencia if referencia != 0 else relevancias
+    else:
+        raise TypeError(f"Tipo não suportado em reajustar_relevancia: {type(relevancias)}")
+
+
 # MICRODIVERSIDADE
 def microdiversidade_parametro(matriz, recomendados):
     recomendados = list(recomendados)
