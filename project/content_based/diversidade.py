@@ -15,7 +15,7 @@ def microdiversidade_parametro(matriz, recomendados):
     media_sim = sim_matrix[i, j].mean()
     return float(1 - media_sim)
 
-def microdiversidade(ids, m_gen, m_dir, m_pais, pesos=(0.45, 0.10, 0.45)):
+def microdiversidade(ids, m_gen, m_dir, m_pais, pesos=(1/3, 1/3, 1/3)):
     div_genero = microdiversidade_parametro(m_gen, ids)
     div_diretor = microdiversidade_parametro(m_dir, ids)
     div_pais = microdiversidade_parametro(m_pais, ids)

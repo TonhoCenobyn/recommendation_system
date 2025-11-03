@@ -20,3 +20,25 @@ def gerar_recomendacao(preferencias, m_gen, m_dir, m_pais):
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
 
     return sim_scores, sim_genero, sim_diretor, sim_pais
+
+
+def gerar_recomendacao_onehot(movies, genero, diretor, pais):
+    """
+    Similaridade baseada em match exato com One-Hot Encoding.
+    """
+    encoder = OneHotEncoder(sparse_output=True)
+    matriz_total = encoder.fit_transform(movies[['genero','diretor','pais_origem']])
+    user_total = encoder.transform(pd.DataFrame(
+        [[genero, diretor, pais]],
+        columns=['genero', 'diretor', 'pais_origem']
+    ))
+    # Similaridade coseno
+    sim_total = cosine_similarity(user_total, matriz_total)
+
+    # Ordenar por similaridade
+    sim_scores = list(enumerate(sim_total[0]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+
+    return sim_scores, sim_total
+
+
