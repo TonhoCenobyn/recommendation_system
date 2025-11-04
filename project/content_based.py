@@ -17,11 +17,10 @@ from content_based.diversidade import (macrodiversidade_geral,
 from content_based.usuario import inserir_entradas
 from collections import Counter
 
-NUM_RODADAS = 10      # número de rodadas automáticas
-TOP_N = 15    # número recomendações por rodada
+NUM_RODADAS = 15      # número de rodadas automáticas
+TOP_N = 20    # número recomendações por rodada
 
-NIVEL_ALEATORIEDADE_ENTRADAS = 3
-NIVEL_ALEATORIEDADE_RECOMENDACOES = 3 # (0=0%, 1=20%, 2=50%, 3=80%)
+NIVEL_ALEATORIEDADE_RECOMENDACOES = 0 # (0=0%, 1=20%, 2=50%, 3=80%)
 
 movies = pd.read_csv("dataset/dataset_distribuido.csv")
 
@@ -33,12 +32,12 @@ matriz_genero = vectorizer_genero.fit_transform(movies["genero"])
 matriz_diretor = vectorizer_diretor.fit_transform(movies["diretor"])
 matriz_pais = vectorizer_pais.fit_transform(movies["pais_origem"])
 
-def main():
+def executar_algoritmo(nivel_aleatoriedade_entradas):
     print("-" * 80)
     print("INICIANDO SISTEMA DE RECOMENDAÇÃO")
     print("-" * 80)
 
-    preferencias = Preferencias(alpha=0.8)
+    preferencias = Preferencias(alpha=0.1)
 
     historico_entradas = {
         "genero": [],
@@ -54,7 +53,7 @@ def main():
         print(f"RODADA: {iteracao}")
         print("-" * 80)
 
-        genero, diretor, pais = inserir_entradas(movies, historico_entradas, NIVEL_ALEATORIEDADE_ENTRADAS)
+        genero, diretor, pais = inserir_entradas(movies, historico_entradas, nivel_aleatoriedade_entradas)
 
         historico_entradas["genero"].append(genero)
         historico_entradas["diretor"].append(diretor)
@@ -221,7 +220,7 @@ def main():
         x=labels_rodadas,
         y=valores_microdiv,
         name='Microdiversidade',
-        marker_color='lightslategray',
+        marker_color='forestgreen',
         text=[f"{v:.2f}" for v in valores_microdiv],  # Adiciona texto na barra
         textposition='auto'
     ))
@@ -229,7 +228,7 @@ def main():
         x=labels_rodadas,
         y=relevancia_perfil_historico,
         name='Relevância (Perfil)',
-        marker_color='royalblue',
+        marker_color='darkgreen',
         text=[f"{v:.2f}" for v in relevancia_perfil_historico],
         textposition='auto'
     ))
@@ -237,7 +236,7 @@ def main():
         x=labels_rodadas,
         y=relevancia_entrada_historico,
         name='Relevância (Entrada)',
-        marker_color='lightblue',
+        marker_color='seagreen',
         text=[f"{v:.2f}" for v in relevancia_entrada_historico],
         textposition='auto'
     ))
@@ -267,23 +266,89 @@ def main():
     # print(df_freq)
 
     # Gráfico interativo de barras (Plotly)
-    fig = go.Figure(data=[
-        go.Bar(
-            x=df_freq["Entrada"],
-            y=df_freq["Frequência"],
-            text=df_freq["Frequência"],
-            textposition="auto",
-            marker_color="lightskyblue"
-        )
-    ])
+    fig = go.Figure(go.Treemap(
+        labels=df_freq["Entrada"],
+        parents=[""] * len(df_freq),  # Cria um "pai" raiz para todos
+        values=df_freq["Frequência"],
+        textinfo="label+value+percent root",  # Mostra Label, Valor e % Total
+        marker_colorscale='Reds'  # Esquema de cores (tons de vermelho)
+    ))
+
     fig.update_layout(
-        title="Frequência das Preferências Inseridas pelo Usuário",
-        xaxis_title="Entrada (Gênero / Diretor / País)",
-        yaxis_title="Número de vezes escolhido",
-        template="plotly_white",
-        xaxis_tickangle=45
+        title="Proporção das Preferências Inseridas pelo Usuário",
+        template="plotly_white"
     )
+
+    # fig.show()  # <-- Descomentei para você ver
+    return macro_global_total, macro_rodadas_total
+
+
+def gerar_grafico_macro(niveis, resultados_filmes, resultados_rodadas):
+    labels_x = [f"Nível {n}" for n in niveis]
+    textos_filmes = [f"{v:.3f}" for v in resultados_filmes]
+    textos_rodadas = [f"{v:.3f}" for v in resultados_rodadas]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=labels_x,
+        y=resultados_filmes,
+        name='Macrodiv. (Filmes)',
+        text=textos_filmes,
+        textposition="auto",
+        marker_color="darkred"  # Cor 1
+    ))
+
+    fig.add_trace(go.Bar(
+        x=labels_x,
+        y=resultados_rodadas,
+        name='Macrodiv. (Rodadas)',
+        text=textos_rodadas,
+        textposition="auto",
+        marker_color="crimson"  # Cor 2
+    ))
+
+    fig.update_layout(
+        title="Variação de Macrodiversidade",
+        xaxis_title="Nível de Aleatoriedade das Entradas",
+        yaxis_title="Macrodiversidade (Média)",
+        barmode='group',
+        template="plotly_white",
+        legend_title="Tipo de Macrodiversidade",
+        yaxis_range=[0, max(max(resultados_filmes), max(resultados_rodadas)) * 1.15]  # Garante que ambas caibam
+    )
+
     # fig.show()
+
+
+def main():
+    print("-" * 80)
+    print("INICIANDO SÉRIE DE SIMULAÇÕES")
+    print("-" * 80)
+
+    niveis_para_testar = [3]
+
+    resultados_macro_filmes = []
+    resultados_macro_rodadas = []
+
+    for nivel in niveis_para_testar:
+        macro_filmes, macro_rodadas = executar_algoritmo(nivel)
+
+        resultados_macro_filmes.append(macro_filmes)
+        resultados_macro_rodadas.append(macro_rodadas)
+
+    print("\n" + "=" * 80)
+    print("SÉRIE DE SIMULAÇÕES CONCLUÍDA")
+    print("Resultados Finais (Nível de Entrada vs. Macrodiversidade):")
+
+    for i in range(len(niveis_para_testar)):
+        print(f"  - Nível {niveis_para_testar[i]}:")
+        print(f"    - Macro (Filmes):  {resultados_macro_filmes[i]:.2f}")
+        print(f"    - Macro (Rodadas): {resultados_macro_rodadas[i]:.2f}")
+
+    print("=" * 80)
+
+    gerar_grafico_macro(niveis_para_testar, resultados_macro_filmes, resultados_macro_rodadas)
 
 if __name__ == "__main__":
     main()
